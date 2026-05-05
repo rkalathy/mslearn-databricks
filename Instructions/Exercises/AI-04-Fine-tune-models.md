@@ -305,8 +305,7 @@ Now that you have a fine-tuned model, you can deploy it as a customized model an
        "properties": {
            "model": {
                "format": "OpenAI",
-               "name": "<YOUR_FINE_TUNED_MODEL>",
-               "version": "1"
+               "name": fine_tuned_model
            }
        }
    }
