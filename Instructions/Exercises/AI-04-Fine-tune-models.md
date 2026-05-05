@@ -1,7 +1,7 @@
 ---
 lab:
-  title: Fine-Tuning Large Language Models using Azure Databricks and Azure OpenAI
-  description: You'll gain hands-on experience fine-tuning a GPT-4o model with custom datasets using Azure Databricks and Azure OpenAI, including validating token counts, submitting fine-tuning jobs, and monitoring their progress. You'll learn how to deploy your customized fine-tuned model and use it via the chat completion API for domain-specific tasks that require specialized knowledge beyond what the base model provides.
+  title: Fine-Tuning Large Language Models using Azure Databricks and Microsoft Foundry
+  description: You'll gain hands-on experience fine-tuning a GPT-4.1 model with custom datasets using Azure Databricks and Microsoft Foundry, including validating token counts, submitting fine-tuning jobs, and monitoring their progress. You'll learn how to deploy your customized fine-tuned model and use it via the chat completion API for domain-specific tasks that require specialized knowledge beyond what the base model provides.
   duration: 60 minutes
   level: 400
   islab: true
@@ -11,9 +11,9 @@ lab:
     - Microsoft Foundry
 ---
 
-# Fine-Tuning Large Language Models using Azure Databricks and Azure OpenAI
+# Fine-Tuning Large Language Models using Azure Databricks and Microsoft Foundry
 
-With Azure Databricks, users can now leverage the power of LLMs for specialized tasks by fine-tuning them with their own data, enhancing domain-specific performance. To fine-tune a language model using Azure Databricks, you can utilize the Mosaic AI Model Training interface which simplifies the process of full model fine-tuning. This feature allows you to fine-tune a model with your custom data, with checkpoints saved to MLflow, ensuring you retain complete control over the fine-tuned model.
+With Azure Databricks and Microsoft Foundry, you can fine-tune large language models on your own data to enhance domain-specific performance. In this lab, Azure Databricks serves as the development environment where you prepare data, call the Microsoft Foundry fine-tuning API, and test the resulting model. Fine-tuning lets you adapt a pre-trained base model to specialized tasks using relatively small curated datasets.
 
 This lab will take approximately **60** minutes to complete.
 
@@ -23,46 +23,53 @@ This lab will take approximately **60** minutes to complete.
 
 You'll need an [Azure subscription](https://azure.microsoft.com/free) in which you have administrative-level access.
 
-## Provision an Azure OpenAI resource
+## Create a Microsoft Foundry resource and project
 
-If you don't already have one, provision an Azure OpenAI resource in your Azure subscription.
+If you don't already have one, create a Microsoft Foundry resource and project in your Azure subscription.
+
+> **Note**: Creating a Foundry resource only requires a subscription, resource group, region, and name. No Key Vault or Application Insights resources are needed.
 
 1. Sign into the **Azure portal** at `https://portal.azure.com`.
-2. Create an **Azure OpenAI** resource with the following settings:
-    - **Subscription**: *Select an Azure subscription that has been approved for access to the Azure OpenAI service*
+2. Use the following link to open the Foundry resource creation page: `https://portal.azure.com/#create/Microsoft.CognitiveServicesAIFoundry`
+3. On the **Create** page, provide the following information on the **Basics** tab:
+    - **Subscription**: *Select your Azure subscription*
     - **Resource group**: *Choose or create a resource group*
     - **Region**: *Make a **random** choice from any of the following regions*\*
-        - East US 2
         - North Central US
         - Sweden Central
-        - Switzerland West
     - **Name**: *A unique name of your choice*
-    - **Pricing tier**: Standard S0
+4. Select **Review + create**, then select **Create** and wait for deployment to complete.
 
-> \* Azure OpenAI resources are constrained by regional quotas. The listed regions include default quota for the model type(s) used in this exercise. Randomly choosing a region reduces the risk of a single region reaching its quota limit in scenarios where you are sharing a subscription with other users. In the event of a quota limit being reached later in the exercise, there's a possibility you may need to create another resource in a different region.
+> \* Foundry resources are constrained by regional quotas. The listed regions include default quota for the model type(s) used in this exercise. Randomly choosing a region reduces the risk of a single region reaching its quota limit in scenarios where you are sharing a subscription with other users. In the event of a quota limit being reached later in the exercise, there's a possibility you may need to create another resource in a different region.
 
-3. Wait for deployment to complete. Then go to the deployed Azure OpenAI resource in the Azure portal.
+5. Once deployment completes, go to the deployed resource. In the left pane, under **Resource Management**, select **Keys and Endpoint**, then copy the **Endpoint** — you will use it later in this exercise.
 
-4. In the left pane, under **Resource Management**, select **Keys and Endpoint**.
+6. In the **Overview** page, select **Go to Microsoft Foundry** to open your resource in the Foundry portal (or navigate directly to `https://ai.azure.com`).
 
-5. Copy the endpoint and one of the available keys as you will use it later in this exercise.
+7. In **Microsoft Foundry**, create a new **project** within your Foundry resource:
+    - Select the project name in the upper-left corner, then select **Create new project**.
+    - Enter a **Project name** and select **Create project**.
+    - Wait for the project to be created.
 
-6. Launch Cloud Shell and run `az account get-access-token` to get a temporary authorization token for API testing. Keep it together with the endpoint and key copied previously.
+8. Launch Cloud Shell and run the following two commands to get temporary authorization tokens for API testing. Keep them together with the endpoint copied previously.
 
-    >**Note**: You only need to copy the `accessToken` field value and **not** the entire JSON output.
+    ```bash
+    az account get-access-token --resource https://cognitiveservices.azure.com
+    az account get-access-token --resource https://management.azure.com
+    ```
+
+    >**Note**: The first token is used for OpenAI/Cognitive Services API calls; the second is used for the Azure management API (model deployment). You only need to copy the `accessToken` field value from each and **not** the entire JSON output.
 
 ## Deploy the required model
 
-Azure provides a web-based portal named **Microsoft Foundry**, that you can use to deploy, manage, and explore models. You'll start your exploration of Azure OpenAI by using Microsoft Foundry to deploy a model.
+Microsoft Foundry allows you to deploy, manage, and explore models. You'll deploy a base model that will later be fine-tuned.
 
 > **Note**: As you use Microsoft Foundry, message boxes suggesting tasks for you to perform may be displayed. You can close these and follow the steps in this exercise.
 
-1. In the Azure portal, on the **Overview** page for your Azure OpenAI resource, scroll down to the **Get Started** section and select the button to go to **Microsoft Foundry**.
-   
-1. In Microsoft Foundry, in the pane on the left, select the **Deployments** page and view your existing model deployments. If you don't already have one, create a new deployment of the **gpt-4o** model with the following settings:
-    - **Deployment name**: *gpt-4o*
+1. In **Microsoft Foundry**, in the pane on the left, select the **Models + endpoints** page and view your existing model deployments. If you don't already have one, create a new deployment of the **gpt-4.1** model with the following settings:
+    - **Deployment name**: *gpt-4.1*
     - **Deployment type**: Standard
-    - **Model version**: *Use default version*
+    - **Model version**: *2025-04-14*
     - **Tokens per minute rate limit**: 10K\*
     - **Content filter**: Default
     - **Enable dynamic quota**: Disabled
@@ -75,34 +82,48 @@ Azure provides a web-based portal named **Microsoft Foundry**, that you can use 
 
 1. Sign into the **Azure portal** at `https://portal.azure.com`.
 2. Create an **Azure Databricks** resource with the following settings:
-    - **Subscription**: *Select the same Azure subscription that you used to create your Azure OpenAI resource*
-    - **Resource group**: *The same resource group where you created your Azure OpenAI resource*
-    - **Region**: *The same region where you created your Azure OpenAI resource*
+    - **Subscription**: *Select the same Azure subscription that you used to create your Microsoft Foundry resource*
+    - **Resource group**: *The same resource group where you created your Microsoft Foundry resource*
+    - **Region**: *The same region where you created your Microsoft Foundry resource*
     - **Name**: *A unique name of your choice*
-    - **Pricing tier**: *Premium* or *Trial*
+    - **Pricing tier**: *Premium*
+    - **Workspace type**: *Hybrid*
+    - **Managed resource group**: *Leave as default or enter a unique name*
 
 3. Select **Review + create** and wait for deployment to complete. Then go to the resource and launch the workspace.
 
-## Create a new notebook and ingest data
+## Create a cluster
+
+Azure Databricks is a distributed processing platform that uses Apache Spark *clusters* to process data in parallel on multiple nodes. Each cluster consists of a driver node to coordinate the work, and worker nodes to perform processing tasks. In this exercise, you'll create a *single-node* cluster to minimize the compute resources used in the lab environment (in which resources may be constrained). In a production environment, you'd typically create a cluster with multiple worker nodes.
+
+> **Tip**: If you already have a cluster with a 17.3 LTS **<u>ML</u>** or higher runtime version in your Azure Databricks workspace, you can use it to complete this exercise and skip this procedure.
 
 1. In the Azure portal, browse to the resource group where the Azure Databricks workspace was created.
+2. Select your Azure Databricks Service resource.
+3. In the **Overview** page for your workspace, use the **Launch Workspace** button to open your Azure Databricks workspace in a new browser tab; signing in if prompted.
 
-1. Select your Azure Databricks Service resource.
+> **Tip**: As you use the Databricks Workspace portal, various tips and notifications may be displayed. Dismiss these and follow the instructions provided to complete the tasks in this exercise.
 
-1. In the **Overview** page for your workspace, use the **Launch Workspace** button to open your Azure Databricks workspace in a new browser tab; signing in if prompted.
+4. In the sidebar on the left, select the **(+) New** task, and then select **Cluster**.
+5. In the **New Cluster** page, create a new cluster with the following settings:
+    - **Cluster name**: *User Name's* cluster (the default cluster name)
+    - **Policy**: Unrestricted
+    - **Machine learning**: Enabled
+    - **Databricks runtime**: 17.3 LTS
+    - **Use Photon Acceleration**: <u>Un</u>selected
+    - **Worker type**: Standard_D4ds_v5
+    - **Single node**: Checked
+    - **Terminate after**: 30 minutes of inactivity
 
-    > **Tip**: As you use the Databricks Workspace portal, various tips and notifications may be displayed. Dismiss these and follow the instructions provided to complete the tasks in this exercise.
+6. Wait for the cluster to be created. It may take a minute or two.
 
-1. In the sidebar, use the **(+) New** link to create a **Notebook**. Select **Serverless** as the default compute.
+> **Note**: If your cluster fails to start, your subscription may have insufficient quota in the region where your Azure Databricks workspace is provisioned. See [CPU core limit prevents cluster creation](https://docs.microsoft.com/azure/databricks/kb/clusters/azure-core-limit) for details. If this happens, you can try deleting your workspace and creating a new one in a different region.
 
-1. In the first code cell, enter and run the following code to install the required libraries:
+## Create a new notebook and ingest data
 
-    ```python
-    %pip install openai tiktoken numpy
-    dbutils.library.restartPython()
-    ```
+1. In the sidebar, use the **(+) New** link to create a **Notebook**. In the **Connect** drop-down list, select your cluster if it is not already selected. If the cluster is not running, it may take a minute or so to start.
 
-1. In a new cell, enter the following SQL query to create a new volume that will be used to store this exercise's data within your default catalog:
+1. In the first cell of the notebook, enter the following SQL query to create a new volume that will be used to store this exercise's data within your default catalog:
 
     ```python
    %sql 
@@ -119,14 +140,14 @@ Azure provides a web-based portal named **Microsoft Foundry**, that you can use 
    wget -O /Volumes/<catalog_name>/default/fine_tuning/validation_set.jsonl https://github.com/MicrosoftLearning/mslearn-databricks/raw/main/data/validation_set.jsonl
     ```
 
-3. In a new cell, run the following code with the access information you copied at the beginning of this exercise to assign persistent environment variables for authentication when using Azure OpenAI resources:
+3. In a new cell, run the following code with the access information you copied at the beginning of this exercise to assign persistent environment variables for authentication when using Microsoft Foundry:
 
     ```python
    import os
 
-   os.environ["AZURE_OPENAI_API_KEY"] = "your_openai_api_key"
-   os.environ["AZURE_OPENAI_ENDPOINT"] = "your_openai_endpoint"
-   os.environ["TEMP_AUTH_TOKEN"] = "your_access_token"
+   os.environ["AZURE_OPENAI_ENDPOINT"] = "your_foundry_endpoint"
+   os.environ["COGNITIVE_SERVICES_TOKEN"] = "your_cognitiveservices_access_token"  # from: az account get-access-token --resource https://cognitiveservices.azure.com
+   os.environ["MANAGEMENT_TOKEN"] = "your_management_access_token"                # from: az account get-access-token --resource https://management.azure.com
     ```
      
 ## Validate token counts
@@ -186,11 +207,13 @@ Both `training_set.jsonl` and `validation_set.jsonl` are made of different conve
        print('*' * 75)
     ```
 
-As a reference, the model used in this exercise, GPT-4o, has the context limit (total number of tokens in the input prompt and the generated response combined) of 128K tokens.
+As a reference, the model used in this exercise, GPT-4.1, has a context limit of 1,047,576 tokens (though standard deployments are capped at 300,000 tokens).
 
-## Upload fine-tuning files to Azure OpenAI
+## Upload fine-tuning files to Microsoft Foundry
 
 Before you start to fine-tune the model, you need to initialize an OpenAI client and add the fine-tuning files to its environment, generating file IDs that will be used to initialize the job.
+
+> **Important**: When running code in Azure Databricks, `DefaultAzureCredential` authenticates as the **Databricks workspace managed identity**, not your signed-in user account. This means assigning the **Cognitive Services OpenAI Contributor** role to your own account is not sufficient — the managed identity also needs the role, or you must authenticate using a user token directly. The code below uses `azure_ad_token` with the `TEMP_AUTH_TOKEN` you obtained earlier via Cloud Shell, which runs as your own identity and avoids this issue.
 
 1. In a new cell, run the following code:
 
@@ -200,8 +223,8 @@ Before you start to fine-tune the model, you need to initialize an OpenAI client
 
     client = AzureOpenAI(
       azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT"),
-      api_key = os.getenv("AZURE_OPENAI_API_KEY"),
-      api_version = "2024-05-01-preview"  # This API version or later is required to access seed/events/checkpoint features
+      azure_ad_token = os.getenv("COGNITIVE_SERVICES_TOKEN"),
+      api_version = "2025-04-01-preview"  # This API version or later is required to access seed/events/checkpoint features
     )
 
     training_file_name = '/Volumes/<catalog_name>/default/fine_tuning/training_set.jsonl'
@@ -231,7 +254,7 @@ Now that the fine-tuning files have been successfully uploaded you can submit yo
    response = client.fine_tuning.jobs.create(
        training_file = training_file_id,
        validation_file = validation_file_id,
-       model = "gpt-4o",
+       model = "gpt-4.1-2025-04-14",
        seed = 105 # seed parameter controls reproducibility of the fine-tuning job. If no seed is specified one will be generated automatically.
    )
 
@@ -247,7 +270,7 @@ The `seed` parameter controls reproducibility of the fine-tuning job. Passing in
    print("Status:", response.status)
     ```
 
->**Note**: You can also monitor the job status in AI Foundry by selecting **Fine-tuning** in the left sidebar.
+>**Note**: You can also monitor the job status in Microsoft Foundry by selecting **Fine-tuning** in the left sidebar.
 
 3. Once the job status changes to `succeeded`, run the following code to get the final results:
 
@@ -260,7 +283,7 @@ The `seed` parameter controls reproducibility of the fine-tuning job. Passing in
    
 ## Deploy fine-tuned model
 
-Now that you have a fine-tuned model, you can deploy it as a customized model and use it like any other deployed model in either the **Chat** Playground of Microsoft Foundry, or via the chat completion API.
+Now that you have a fine-tuned model, you can deploy it as a customized model and use it like any other deployed model in either the **Chat** playground of Microsoft Foundry, or via the chat completion API.
 
 1. In a new cell, run the following code to deploy your fine-tuned model:
    
@@ -268,11 +291,11 @@ Now that you have a fine-tuned model, you can deploy it as a customized model an
    import json
    import requests
 
-   token = os.getenv("TEMP_AUTH_TOKEN")
+   token = os.getenv("MANAGEMENT_TOKEN")
    subscription = "<YOUR_SUBSCRIPTION_ID>"
    resource_group = "<YOUR_RESOURCE_GROUP_NAME>"
-   resource_name = "<YOUR_AZURE_OPENAI_RESOURCE_NAME>"
-   model_deployment_name = "gpt-4o-ft"
+   resource_name = "<YOUR_AZURE_AI_SERVICES_RESOURCE_NAME>"  # The Azure AI Services resource name from your AI Foundry project settings
+   model_deployment_name = "gpt-4.1-ft"
 
    deploy_params = {'api-version': "2023-05-01"}
    deploy_headers = {'Authorization': 'Bearer {}'.format(token), 'Content-Type': 'application/json'}
@@ -308,16 +331,16 @@ Now that you have a fine-tuned model, you can deploy it as a customized model an
 
    client = AzureOpenAI(
      azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT"),
-     api_key = os.getenv("AZURE_OPENAI_API_KEY"),
+     azure_ad_token = os.getenv("COGNITIVE_SERVICES_TOKEN"),
      api_version = "2024-02-01"
    )
 
    response = client.chat.completions.create(
-       model = "gpt-4o-ft", # model = "Custom deployment name you chose for your fine-tuning model"
+       model = "gpt-4.1-ft", # model = "Custom deployment name you chose for your fine-tuning model"
        messages = [
            {"role": "system", "content": "You are a helpful assistant."},
-           {"role": "user", "content": "Does Azure OpenAI support customer managed keys?"},
-           {"role": "assistant", "content": "Yes, customer managed keys are supported by Azure OpenAI."},
+           {"role": "user", "content": "Does Microsoft Foundry support customer managed keys?"},
+           {"role": "assistant", "content": "Yes, customer managed keys are supported by Microsoft Foundry."},
            {"role": "user", "content": "Do other Azure AI services support this too?"}
        ]
    )
@@ -327,7 +350,7 @@ Now that you have a fine-tuned model, you can deploy it as a customized model an
  
 ## Clean up
 
-When you're done with your Azure OpenAI resource, remember to delete the deployment or the entire resource in the **Azure portal** at `https://portal.azure.com`.
+When you're done, remember to delete the deployment or the entire Microsoft Foundry project in **Microsoft Foundry** at `https://ai.azure.com`.
 
 In Azure Databricks portal, on the **Compute** page, select your cluster and select **&#9632; Terminate** to shut it down.
 
